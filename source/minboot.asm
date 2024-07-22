@@ -3,25 +3,30 @@
 org MINBOOT_ORIGIN
 bits 16 ; CODE
 
-; DX:AX MUST CONTAIN THE LBA OF THE KERNEL.SYS FILE
-; CX MUST CONTAIN A KERNEL.SYS SIZE IN BYTES
-; BX MUST CONTAIN A NEAR POINTER TO A SINGLE SECTOR LBA READ FUNCTION
-; DI:SI MUST CONTAIN A VOLUME PATH
+; DL MUST CONTAIN A BIOS DRIVE NUMBER
+; DS:SI MUST CONTAIN A POINTER TO THE FOLOWING STRUCTURE:
+;   READ FUNCTION OFFSET (2 BYTES)
+;   KERNEL.SYS BYTE SIZE (2 BYTES)
+;   KERNEL.SYS LBA (4 BYTES)
 
 start:
   cli
   cld
-  mov [READ_PROC], bx
-  mov [BOOT_INFO.BOOT_DEVICE], si
-  mov [BOOT_INFO.BOOT_DEVICE + 2], di
-  push ax
+  mov [BOOT_INFO.BOOT_DEVICE + 3], dl
+  lodsw
+  mov [READ_PROC], ax
+  lodsw 
+  add ax, SECTOR_SIZE - 1
+  shr ax, SECTOR_SHIFT
+  mov cx, ax
   mov ax, DATA_BUFFER
   shr ax, 4
   mov es, ax
   mov bx, 0
-  pop ax
-  add cx, SECTOR_SIZE - 1
-  shr cx, SECTOR_SHIFT
+  lodsw
+  mov dx, ax
+  lodsw
+  xchg ax, dx
 
 read_kernel:
   push ax
@@ -41,7 +46,7 @@ find_header:
   .l0:
     push cx
     mov cx, 4
-    mov si, KERNEL_MAGIC_DATA
+mov si, KERNEL_MAGIC_DATA
     repe cmpsb
     je .e0
     add di, cx
@@ -52,17 +57,102 @@ find_header:
   pop cx
 
 check_header:
-  mov ax, [di]
-  mov dx, [di + 2]
-  add ax, [di + 4]
-  adc dx, [di + 6]
-  add ax, [di + 8]
-  adc dx, [di + 10]
+  mov ax, [es:di]
+  mov dx, [es:di + 2]
+  add ax, [es:di + 4]
+  adc dx, [es:di + 6]
+  add ax, [es:di + 8]
+  adc dx, [es:di + 10]
   test ax, ax
   jnz bad_header
   test dx, dx
   jnz bad_header
   mov [VAR_HEADER], di
+
+get_load_offsets:
+  mov al, [es:di + 6]
+  test al, 1
+  jz .use_elf
+  mov ax, [es:di + 16]
+  mov [LOAD.ADDR], ax
+  mov ax, [es:di + 18]
+  mov [LOAD.ADDR + 2], ax
+  mov ax, [es:di + 12]
+  mov dx, [es:di + 14]
+  sub ax, [LOAD.ADDR]
+  sbb dx, [LOAD.ADDR + 2]
+  mov [LOAD.OFFSET], ax
+  mov [LOAD.OFFSET + 2], dx
+  mov ax, [es:di + 20]
+  mov dx, [es:di + 22]
+  sub ax, [LOAD.ADDR]
+  sbb dx, [LOAD.ADDR + 2]
+  mov [LOAD.SIZE], ax
+  mov [LOAD.SIZE + 2], dx
+  mov ax, [es:di + 24]
+  mov dx, [es:di + 26]
+  sub ax, [es:di + 20]
+  sbb dx, [es:di + 22]
+  mov [BSS_SIZE], ax
+  mov [BSS_SIZE + 2], dx
+  mov ax, [es:di + 28]
+  mov [ENTRY_PTR], ax
+  mov ax, [es:di + 30]
+  mov [ENTRY_PTR + 2], ax
+  jmp .end
+.use_elf: ; TODO : NOT YET IMPLEMENTED
+  jmp no_address
+.end:
+
+set_video_mode: ; TODO : NOT YET IMPLEMENTED
+
+get_mem_size:
+  clc
+  int 0x12
+  jc .no_mem
+  mov [BOOT_INFO.MEM_LOWER], ax
+  mov ah, 0x8A
+  int 0x15
+  jc .no_mem
+  mov [BOOT_INFO.MEM_UPPER], ax
+  mov [BOOT_INFO.MEM_UPPER + 2], dx
+.set_flag:
+  mov al, [BOOT_INFO.FLAGS]
+  or al, 1
+  mov [BOOT_INFO.FLAGS], al
+  jmp .end
+.no_mem:
+  mov al, [es:di + 4]
+  test al, 2
+  jz .set_flag
+.end:
+
+get_mem_map: ; TODO : NOT YET IMPLEMENTED
+
+get_drives: ; TODO : NOT YET IMPLEMENTED
+
+get_apm_table:
+  clc
+  mov ax, 0x5300
+  mov bx, 0
+  int 0x15
+  jc .no_apm
+  mov [APM.VERSION], ax
+  mov [APM.FLAGS], cx
+  mov ax, 0x5303
+  mov bx, 0
+  int 0x15
+  jc .no_apm
+  mov [APM.CSEG], ax
+  mov [APM.OFFSET], ebx
+  mov [APM.CSEG_16], cx
+  mov [APM.DSEG], dx
+  mov [APM.CSEG_LEN], esi
+  mov [APM.DSEG_LEN], di
+  mov al, [BOOT_INFO.FLAGS + 2]
+  or al, 4
+  mov [BOOT_INFO.FLAGS + 2], al
+.no_apm:
 
 prepare:
   call enable_a20
@@ -83,6 +173,10 @@ read_error:
 
 no_header:
   mov si, STR.NOHDR
+  jmp error
+
+no_address:
+  mov si, STR.NOELF
   jmp error
 
 bad_header:
@@ -192,9 +286,9 @@ align 4, db 0
 KERNEL_MAGIC_DATA: dd KERNEL_MAGIC
 
 BOOT_INFO:
-  .FLAGS:         dd 0
-  .MEM_LOWER:     dd 0
-  .MEM_UPPER:     dd 0
+  .FLAGS:         dd 0x1202
+  .MEM_LOWER:     dd 640
+  .MEM_UPPER:     dd 14
   .BOOT_DEVICE:   dd 0xFFFFFFFF
   .CMD_LINE:      dd 0
   .MODS_COUNT:    dd 0
@@ -206,8 +300,20 @@ BOOT_INFO:
   .DRIVES_ADDR:   dd 0
   .CONFIG_TABLE:  dd 0
   .LOADER_NAME:   dd STR.NAME
-  .APM_TABLE:     dd 0
-  .
+  .APM_TABLE:     dd APM
+  .VBE_CTRL_INFO: dd 0
+  .VBE_MODE_INFO: dd 0
+  .VBE_MODE:      dw 0
+  .VBE_SEG:       dw 0
+  .VBE_OFF:       dw 0
+  .VBE_LEN:       dw 0
+  .LFB_ADDR:      dd 0xB8000
+  .LFB_PITCH:     dd 80
+  .LFB_WIDTH:     dd 80
+  .LFB_HEIGHT:    dd 25
+  .LFB_BPP:       db 16
+  .LFB_TYPE:      db 2
+  .COLOR_INFO:    times 6 db 0
 
 align 16, db 0 ; BSS
 
@@ -221,7 +327,17 @@ LOAD:
 BSS_SIZE  equ $ + 16
 ENTRY_PTR equ $ + 20
 
-TEST_BYTE equ $ + 24
+APM:
+  .VERSION  equ $ + 24
+  .CSEG     equ $ + 26
+  .OFFSET   equ $ + 28
+  .CSEG_16  equ $ + 32
+  .DSEG     equ $ + 34
+  .FLAGS    equ $ + 36
+  .CSEG_LEN equ $ + 38
+  .DSEG_LEN equ $ + 42
 
-DATA_BUFFER equ $ + 32
+TEST_BYTE equ $ + 44
+
+DATA_BUFFER equ $ + 64
 

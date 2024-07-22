@@ -1,11 +1,12 @@
 MinBoot
 =========================
-A minimal multiboot complient bootloader for low capacity storage media.
+A minimal multiboot compliant bootloader for
+legacy BIOS with low capacity storage media.
 
 Why
 -------------------------
 Many operating system developers use multiboot standart for booting their
-operating systems, but all the popular multiboot complient bootloaders are take
+operating systems, but all the popular multiboot compliant bootloaders take
 a lot of storage space with their countless modules (like GRUB does).\
 That is precisely why I am developing my very own solution
 to this apparently made up problem.
