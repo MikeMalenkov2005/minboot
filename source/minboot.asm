@@ -29,13 +29,7 @@ start:
   xchg ax, dx
 
 read_kernel:
-  push ax
-  push cx
-  push dx
   call near [READ_PROC]
-  pop dx
-  pop cx
-  pop ax
   jc read_error
   add bx, SECTOR_SIZE
   loop read_kernel
@@ -46,7 +40,7 @@ find_header:
   .l0:
     push cx
     mov cx, 4
-mov si, KERNEL_MAGIC_DATA
+    mov si, KERNEL_MAGIC_DATA
     repe cmpsb
     je .e0
     add di, cx
