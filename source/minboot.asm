@@ -29,7 +29,7 @@ start:
   xchg ax, dx
 
 read_kernel:
-  call near [READ_PROC]
+  call word [READ_PROC]
   jc read_error
   add bx, SECTOR_SIZE
   loop read_kernel
@@ -38,17 +38,17 @@ find_header:
   mov di, 0
   mov cx, 2048
   .l0:
-    push cx
-    mov cx, 4
-    mov si, KERNEL_MAGIC_DATA
-    repe cmpsb
+    mov ax, [es:di]
+    cmp ax, (KERNEL_MAGIC & 0xFFFF)
+    jne .next
+    mov ax, [es:di + 2]
+    cmp ax, (KERNEL_MAGIC >> 16)
     je .e0
-    add di, cx
-    pop cx
+  .next:
+    add di, 4
     loop .l0
     jmp no_header
   .e0:
-  pop cx
 
 check_header:
   mov ax, [es:di]
@@ -277,8 +277,6 @@ STR:
 
 align 4, db 0
 
-KERNEL_MAGIC_DATA: dd KERNEL_MAGIC
-
 BOOT_INFO:
   .FLAGS:         dd 0x1202
   .MEM_LOWER:     dd 640
@@ -311,8 +309,8 @@ BOOT_INFO:
 
 align 16, db 0 ; BSS
 
-VAR_HEADER  equ $
-READ_PROC   equ $ + 2
+READ_PROC   equ $
+VAR_HEADER  equ $ + 2
 
 LOAD:
   .OFFSET equ $ + 4

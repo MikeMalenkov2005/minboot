@@ -29,6 +29,8 @@ EBPB:
 .SYSTEM_ID: db "FAT12   "
 
 start:
+  cli
+  cld
   xor ax, ax
   mov ds, ax
   mov es, ax
@@ -166,7 +168,10 @@ find: ; ROOT IN DS:SI, NAME IN ES:DI -> ENTRY IN DS:SI, LBA IN DX:AX, BYTE SIZE 
   .e0:
   mov ax, [si + 26]
   sub ax, 2
-  jb .fail
+  jae .end
+  add si, 32
+  jmp .l0
+.end:
   mov cl, [BPB.CLUSTER_SIZE]
   mov ch, 0
   mul cx
@@ -217,10 +222,10 @@ MSG:
 times SECTOR_SIZE - ($ - $$) db 0
 dw 0xAA55
 
-DATA_SECTOR equ $
-
 SYS:
-.READ equ $ + 4
-.SIZE equ $ + 6
-.LBA  equ $ + 8
+.READ equ $ + 0
+.SIZE equ $ + 2
+.LBA  equ $ + 4
+
+DATA_SECTOR equ $ + 8
 
