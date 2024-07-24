@@ -31,12 +31,13 @@ start:
 read_kernel:
   call word [READ_PROC]
   jc read_error
+  inc ax
+  adc dx, 0
   add bx, SECTOR_SIZE
   loop read_kernel
 
 find_header:
   mov di, 0
-  mov cx, 2048
   .l0:
     mov ax, [es:di]
     cmp ax, (KERNEL_MAGIC & 0xFFFF)
@@ -45,8 +46,9 @@ find_header:
     cmp ax, (KERNEL_MAGIC >> 16)
     je .e0
   .next:
-    add di, 4
-    loop .l0
+    inc di
+    cmp di, 0x2000
+    jb .l0
     jmp no_header
   .e0:
 
@@ -94,11 +96,65 @@ get_load_offsets:
   mov ax, [es:di + 30]
   mov [ENTRY_PTR + 2], ax
   jmp .end
-.use_elf: ; TODO : NOT YET IMPLEMENTED
-  jmp no_address
+.use_elf:
+  mov si, DATA_BUFFER
+  lodsw
+  cmp ax, 0x457F
+  jne no_address
+  lodsw
+  cmp ax, 0x464C
+  jne no_address
+  lodsw
+  cmp ax, 0x0101
+  jne no_address
+  lodsw
+  cmp al, 1
+  jne no_address
+  add si, 8
+  lodsw
+  cmp ax, 2
+  jne no_address
+  lodsw
+  cmp ax, 3
+  jne no_address
+  lodsw
+  cmp ax, 1
+  jne no_address
+  lodsw
+  test ax, ax
+  jnz no_address
+  lodsw
+  mov [ENTRY_PTR], ax
+  lodsw
+  mov [ENTRY_PTR + 2], ax
+  add si, 8
+  lodsw
+  test ax, ax
+  jnz no_address
+  lodsw
+  test ax, ax
+  jnz no_address
+  lodsw
+  cmp ax, 52
+  jne no_address
+  lodsw
+  cmp ax, 32
+  jne no_address
+  lodsw
+  test ax, ax
+  jz no_address
+  lodsw
+  cmp ax, 40
+  jne no_address
+  mov al, 1
+  mov [USE_ELF], al
 .end:
 
 set_video_mode: ; TODO : NOT YET IMPLEMENTED
+  mov al, [es:di + 4]
+  test al, 4
+  jz .no_vbe
+.no_vbe:
 
 get_mem_size:
   clc
@@ -245,6 +301,36 @@ relocate:
   mov fs, ax
   mov gs, ax
   mov ss, ax
+  mov al, [USE_ELF]
+  test al, al
+  jz .no_elf
+  .do_elf: ; TODO : NOT YET IMPLEMENTED
+    mov ebx, DATA_BUFFER
+    add ebx, [DATA_BUFFER + 28]
+    mov ecx, [DATA_BUFFER + 44]
+    and ecx, 0xFFFF
+    .lp:
+      mov eax, [ebx]
+      cmp eax, 1
+      jne .next
+      mov esi, DATA_BUFFER
+      add esi, [ebx + 4]
+      mov edi, [ebx + 12]
+      mov edx, ecx
+      mov ecx, [ebx + 16]
+      rep movsb
+      mov ecx, [ebx + 20]
+      sub ecx, [ebx + 16]
+      jbe .skp
+        xor eax, eax
+        rep stosb
+      .skp:
+      mov ecx, edx
+    .next:
+      add ebx, 32
+      loop .lp
+    jmp .end
+  .no_elf:
   mov esi, DATA_BUFFER
   add esi, [LOAD.OFFSET]
   mov edi, [LOAD.ADDR]
@@ -253,6 +339,7 @@ relocate:
   mov al, 0
   mov ecx, [BSS_SIZE]
   rep stosb
+.end:
   mov eax, LOADER_MAGIC
   mov ebx, BOOT_INFO
   jmp [ENTRY_PTR]
@@ -275,6 +362,8 @@ STR:
   .BADHDR:  db "Bad multiboot header", 0
   .NOELF:   db "Missing address information", 0
 
+USE_ELF: db 0
+
 align 4, db 0
 
 BOOT_INFO:
@@ -292,7 +381,7 @@ BOOT_INFO:
   .DRIVES_ADDR:   dd 0
   .CONFIG_TABLE:  dd 0
   .LOADER_NAME:   dd STR.NAME
-  .APM_TABLE:     dd APM
+  .APM_TABLE:     dd APM.VERSION
   .VBE_CTRL_INFO: dd 0
   .VBE_MODE_INFO: dd 0
   .VBE_MODE:      dw 0
@@ -331,5 +420,7 @@ APM:
 
 TEST_BYTE equ $ + 44
 
-DATA_BUFFER equ $ + 64
+VESA_BUFFER equ $ + 64
+
+DATA_BUFFER equ $ + 1088
 

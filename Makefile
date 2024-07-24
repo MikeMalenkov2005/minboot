@@ -26,5 +26,5 @@ $B/%.bin: $S/%.asm $I
 
 .PHONY: clean
 clean:
-	rm -rf $B *.img *.sys
+	rm -rf $B *.img *.SYS
 
