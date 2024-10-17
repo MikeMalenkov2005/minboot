@@ -3,7 +3,7 @@ bits 32
 
 %include "source/shared.inc"
 
-FLAGS equ (1 << 16) | (1 << 1) | (1 << 0)
+FLAGS equ 0x10007 ; ALL FLAGS
 
 dd KERNEL_MAGIC
 dd FLAGS
@@ -15,7 +15,7 @@ dd EOF
 dd EOF
 dd start
 
-dd 0
+dd 1
 dd 0
 dd 0
 dd 0

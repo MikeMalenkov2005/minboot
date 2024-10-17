@@ -15,7 +15,7 @@ start:
   mov [BOOT_INFO.BOOT_DEVICE + 3], dl
   lodsw
   mov [READ_PROC], ax
-  lodsw 
+  lodsw
   add ax, SECTOR_SIZE - 1
   shr ax, SECTOR_SHIFT
   mov cx, ax
@@ -151,9 +151,21 @@ get_load_offsets:
 .end:
 
 set_video_mode: ; TODO : NOT YET IMPLEMENTED
+  mov ax, [0x44A]
+  mov [BOOT_INFO.LFB_WIDTH], ax
+  shl ax, 1
+  mov [BOOT_INFO.LFB_PITCH], ax
   mov al, [es:di + 4]
   test al, 4
   jz .no_vbe
+  mov si, STR.NOVESA
+  .l0:
+    lodsb
+    mov ah, 0x0E
+    test al, al
+    jz .no_vbe
+    int 0x10
+    jmp .l0
 .no_vbe:
 
 get_mem_size:
@@ -361,6 +373,7 @@ STR:
   .NOHDR:   db "Missing multiboot header", 0
   .BADHDR:  db "Bad multiboot header", 0
   .NOELF:   db "Missing address information", 0
+  .NOVESA:  db "VBE is not yet supported", 0
 
 USE_ELF: db 0
 
@@ -388,8 +401,8 @@ BOOT_INFO:
   .VBE_SEG:       dw 0
   .VBE_OFF:       dw 0
   .VBE_LEN:       dw 0
-  .LFB_ADDR:      dd 0xB8000
-  .LFB_PITCH:     dd 80
+  .LFB_ADDR:      dq 0xB8000
+  .LFB_PITCH:     dd 160
   .LFB_WIDTH:     dd 80
   .LFB_HEIGHT:    dd 25
   .LFB_BPP:       db 16
