@@ -173,9 +173,28 @@ get_mem_size:
   int 0x12
   jc .no_mem
   mov [BOOT_INFO.MEM_LOWER], ax
-  mov ah, 0x8A
+  xor cx, cx
+  xor dx, dx
+  mov ax, 0xE801
   int 0x15
   jc .no_mem
+  cmp ah, 0x86
+  je .no_mem
+  cmp ah, 0x80
+  je .no_mem
+  jcxz .use_ax
+  mov ax, cx
+  mov bx, dx
+.use_ax:
+  xor dx, dx
+  test bh, 0xFC
+  jz .set_upper
+  mov dl, bh
+  shr dl, 2
+.set_upper:
+  shl bx, 6
+  add ax, bx
+  adc dx, 0
   mov [BOOT_INFO.MEM_UPPER], ax
   mov [BOOT_INFO.MEM_UPPER + 2], dx
 .set_flag:
